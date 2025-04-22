@@ -3,15 +3,27 @@ from datetime import datetime, timedelta
 import pandas as pd
 
 # ---------- Helper Functions ----------
+def format_pace(min_per_mile):
+    """
+    Convert a pace in decimal minutes per mile to MM:SS string format.
+    """
+    minutes = int(min_per_mile)
+    seconds = int(round((min_per_mile - minutes) * 60))
+    return f"{minutes}:{seconds:02d}"
+
+
 def rpe_to_pace_map(base_pace):
+    """
+    Return a mapping from RPE to formatted pace ranges using MM:SS format.
+    """
     return {
-        3: f"{round(base_pace + 3, 2)}–{round(base_pace + 4, 2)} min/mile (Recovery)",
-        4: f"{round(base_pace + 2, 2)}–{round(base_pace + 2.5, 2)} min/mile (Easy)",
-        5: f"{round(base_pace + 1.5, 2)}–{round(base_pace + 2, 2)} min/mile (Steady)",
-        6: f"{round(base_pace + 0.75, 2)}–{round(base_pace + 1.25, 2)} min/mile (Marathon Pace)",
-        7: f"{round(base_pace + 0.25, 2)}–{round(base_pace + 0.5, 2)} min/mile (Tempo)",
-        8: f"{round(base_pace - 0.1, 2)}–{round(base_pace + 0.1, 2)} min/mile (10K)",
-        9: f"{round(base_pace - 0.3, 2)}–{round(base_pace - 0.15, 2)} min/mile (5K)",
+        3: f"{format_pace(base_pace + 3)}–{format_pace(base_pace + 4)} min/mile (Recovery)",
+        4: f"{format_pace(base_pace + 2)}–{format_pace(base_pace + 2.5)} min/mile (Easy)",
+        5: f"{format_pace(base_pace + 1.5)}–{format_pace(base_pace + 2)} min/mile (Steady)",
+        6: f"{format_pace(base_pace + 0.75)}–{format_pace(base_pace + 1.25)} min/mile (Marathon Pace)",
+        7: f"{format_pace(base_pace + 0.25)}–{format_pace(base_pace + 0.5)} min/mile (Tempo)",
+        8: f"{format_pace(base_pace - 0.1)}–{format_pace(base_pace + 0.1)} min/mile (10K)",
+        9: f"{format_pace(base_pace - 0.3)}–{format_pace(base_pace - 0.15)} min/mile (5K)",
     }
 
 # ---------- Workout Library ----------
@@ -41,11 +53,9 @@ def generate_rpe_week(user_profile, workout_library, week_num=1):
 
     # Structure based on days/week
     if days == 3:
-        # Alternate Day 1 between tempo and intervals
         first = "tempo" if week_num % 2 == 1 else "interval"
         structure = [first, "easy", "long"]
     else:
-        # 4–6 days: long, easy, intervals, tempo, then extra easy
         structure = ["long", "easy", "interval", "tempo"] + ["easy"] * (days - 4)
 
     week_plan = []
