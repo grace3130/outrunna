@@ -111,7 +111,10 @@ def generate_wave(user_profile, start_week_num, base_minutes, progression_rate=0
                 if sess["rpe"] in [7, 9]:
                     week_sessions[j] = tt
                     break
-        wave.append({"week_num": week_num, "minutes": minutes, "sessions": week_sessions})
+        entry = {"week_num": week_num, "minutes": minutes, "sessions": week_sessions}
+        if is_deload:
+            entry["label"] = "Deload Week"
+        wave.append(entry)
 
     return wave
 
@@ -161,7 +164,7 @@ def generate_plan(user_profile, start_date, race_date, base_minutes):
 # ---------- Prediction Function ----------
 def predict_time(trial_str, trial_dist, goal_dist):
     m, s = map(int, trial_str.split(':'))
-    t1 = m + s/60
+    t1 = m + s / 60
     t2 = t1 * (goal_dist / trial_dist) ** 1.06
     mm = int(t2)
     ss = int((t2 - mm) * 60)
@@ -207,6 +210,7 @@ if st.button("Generate Plan"):
 
     for idx, tt_date in enumerate(tt_dates):
         row_cols = st.columns(3)
+        # Highlight Deload weeks in green
         row_cols[0].write(f"**{tt_date}**\nTarget: {target_ranges[idx]}")
         key = f"tt_input_{idx}"
         tt_input = row_cols[1].text_input("Enter TT (MM:SS)", "", key=key)
@@ -222,7 +226,10 @@ if st.button("Generate Plan"):
     st.subheader("🏃 Training Plan")
     for wk in plan:
         label = wk.get('label', f"Week {wk['week_num']}")
-        st.markdown(f"### {label} – {wk['minutes']} min")
+        if label == "Deload Week":
+            st.markdown(f"<h3 style='color:green'>{label} – {wk['minutes']} min</h3>", unsafe_allow_html=True)
+        else:
+            st.markdown(f"### {label} – {wk['minutes']} min")
         for sess in wk['sessions']:
             st.markdown(f"- **{sess['day']}**: {sess['workout']} – {sess['duration']} min @ RPE {sess['rpe']}")
             st.caption(f"Pace: {sess.get('context_pace','N/A')} | {sess.get('description','')}")
