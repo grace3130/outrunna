@@ -156,31 +156,74 @@ def predict_time(trial_str, trial_dist, goal_dist):
     return f"{mm}:{ss:02d}"
 
 # ---------- Streamlit UI ----------
-st.title("OutRunna. It's free")
+st.title("OutRunna MVP")
+
+# Inputs
 col1, col2 = st.columns(2)
 with col1:
     goal_dist = st.selectbox("Goal Distance", ["5K","10K","Half","Marathon"])
-    pr = st.text_input("5K PR (MM:SS)","25:00")
+    pr = st.text_input("5K PR (MM:SS)", "25:00")
+    # Initial race prediction based on PR
+    try:
+        m, s = map(int, pr.split(':'))
+        init_pred = predict_time(pr, 3.1, {"5K":3.1, "10K":6.2, "Half":13.1, "Marathon":26.2}[goal_dist])
+        st.success(f"Initial Predicted {goal_dist} Time: {init_pred}")
+    except:
+        pass
 with col2:
-    days = st.slider("Days/Week",3,6,4)
-    rd = st.date_input("Race Date",datetime.today()+timedelta(weeks=8))
+    days = st.slider("Days/Week", 3, 6, 4)
+    rd = st.date_input("Race Date", datetime.today() + timedelta(weeks=8))
 
 if st.button("Generate Plan"):
+    # Base pace from PR
     mins, secs = map(int, pr.split(':'))
-    base_pace = (mins*60+secs)/3.1/60
-    user = {"goal_distance":goal_dist,"days_per_week":days,"weekly_duration_minutes":240,"base_5k_pace":base_pace}
-    plan = generate_plan(user,str(datetime.today().date()),str(rd),240)
+    base_pace = (mins*60 + secs)/3.1/60
+    user = {
+        "goal_distance": goal_dist,
+        "days_per_week": days,
+        "weekly_duration_minutes": 240,
+        "base_5k_pace": base_pace
+    }
+    # Generate plan
+    plan = generate_plan(user, str(datetime.today().date()), str(rd), 240)
 
-    st.subheader("Race Prediction")
-    tt = st.text_input("Time Trial (MM:SS)","")
-    tdist = 2 if goal_dist=="5K" else 3.1
-    gdist = {"5K":3.1,"10K":6.2,"Half":13.1,"Marathon":26.2}[goal_dist]
-    if tt and ':' in tt:
-        st.success(f"Predicted {goal_dist} Time: {predict_time(tt,tdist,gdist)}")
+    # Time Trial schedule
+    st.subheader("📅 Time Trial Schedule & Race Predictions")
+    start = datetime.today().date()
+    total_weeks = (rd - start).days // 7
+    tt_weeks = []
+    week_cursor = 1
+    while total_weeks - week_cursor >= 2:
+        tt_week = week_cursor + 3  # deload week
+        tt_date = start + timedelta(weeks=tt_week-1)
+        tt_weeks.append(tt_date)
+        week_cursor += 4
 
-    st.subheader("Training Plan")
+    tt_dist = 2 if goal_dist == "5K" else 3.1
+    goal_mi = {"5K":3.1, "10K":6.2, "Half":13.1, "Marathon":26.2}[goal_dist]
+
+    # Placeholder target ranges for TT (to define algorithm later)
+    target_ranges = ["--:--" for _ in tt_weeks]
+
+    # Build input table
+    for idx, tt_date in enumerate(tt_weeks):
+        row_cols = st.columns(3)
+        row_cols[0].write(f"**{tt_date}**
+Target: {target_ranges[idx]}")
+        key_in = f"tt_input_{idx}"
+        tt_input = row_cols[1].text_input("Enter TT (MM:SS)", "", key=key_in)
+        pred = ""
+        try:
+            if ':' in tt_input:
+                pred = predict_time(tt_input, tt_dist, goal_mi)
+        except:
+            pred = "Error"
+        row_cols[2].write(f"**{pred}**")
+
+    # Display plan
+    st.subheader("🏃 Training Plan")
     for wk in plan:
-        label = wk.get('label',f"Week {wk['week']}")
+        label = wk.get('label', f"Week {wk['week']}")
         st.markdown(f"### {label} – {wk['minutes']} min")
         for s in wk['sessions']:
             st.markdown(f"- **{s['day']}**: {s['workout']} – {s['duration']} min @ RPE {s['rpe']}")
