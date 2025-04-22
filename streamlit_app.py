@@ -188,9 +188,7 @@ if st.button("Generate Plan"):
     }
 
     plan = generate_plan_until_race(user_profile, str(datetime.today().date()), str(race_date), 240)
-
-
-# ---------- Time Trial Prediction Display ----------
+    # ---------- Time Trial Prediction Display ----------
 st.subheader("📊 Race Time Prediction (Based on Time Trial)")
 
 # Input for latest time trial result
@@ -217,3 +215,5 @@ if trial_time:
         for w in week["workouts"]:
             st.markdown(f"- **{w['day']}**: {w['workout']} – {w['duration']} min @ RPE {w['rpe']}  ")
             st.caption(f"Pace: {w['context_pace']} | {w['description']}")
+
+
