@@ -208,7 +208,8 @@ if st.button("Generate Plan"):
     # Build input table
     for idx, tt_date in enumerate(tt_weeks):
         row_cols = st.columns(3)
-        row_cols[0].write(f"**{tt_date}**
+                row_cols[0].write(f"**{tt_date}**
+Target: {target_ranges[idx]}")
 Target: {target_ranges[idx]}")
         key_in = f"tt_input_{idx}"
         tt_input = row_cols[1].text_input("Enter TT (MM:SS)", "", key=key_in)
