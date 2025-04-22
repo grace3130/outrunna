@@ -151,8 +151,21 @@ def generate_plan_until_race(user_profile, start_date, race_date, base_minutes):
 
     return plan
 
+def update_prediction(trial_time_str, trial_distance_mi, goal_distance_mi):
+    # Convert MM:SS to total minutes
+    minutes, seconds = map(int, trial_time_str.split(":"))
+    trial_time_min = minutes + seconds / 60
+
+    # Riegel formula
+    predicted_time = trial_time_min * (goal_distance_mi / trial_distance_mi) ** 1.06
+
+    # Convert to MM:SS format
+    predicted_min = int(predicted_time)
+    predicted_sec = int((predicted_time - predicted_min) * 60)
+    return f"{predicted_min}:{predicted_sec:02d}"
+
 # ---------- Streamlit UI ----------
-st.title("OutRunna - RPE Based Training Plan Generator")
+st.title("OutRunna. It's free.")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -175,6 +188,27 @@ if st.button("Generate Plan"):
     }
 
     plan = generate_plan_until_race(user_profile, str(datetime.today().date()), str(race_date), 240)
+
+
+# ---------- Time Trial Prediction Display ----------
+st.subheader("📊 Race Time Prediction (Based on Time Trial)")
+
+# Input for latest time trial result
+trial_time = st.text_input("Enter your most recent time trial result (MM:SS)", "16:30")
+
+# Time trial and goal distances in miles
+trial_dist = 2 if goal_distance.lower() == "5k" else 3.1
+goal_dist = {
+    "5k": 3.1,
+    "10k": 6.2,
+    "half": 13.1,
+    "marathon": 26.2
+}[goal_distance.lower()]
+
+# Calculate and show predicted race time
+if trial_time:
+    prediction = update_prediction(trial_time, trial_dist, goal_dist)
+    st.success(f"Predicted {goal_distance.upper()} Time: **{prediction}**")
 
     st.subheader("Your Training Plan")
     for week in plan:
