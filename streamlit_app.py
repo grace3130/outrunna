@@ -156,7 +156,7 @@ def predict_time(trial_str, trial_dist, goal_dist):
     return f"{mm}:{ss:02d}"
 
 # ---------- Streamlit UI ----------
-st.title("OutRunna MVP")
+st.title("OutRunna. It's free")
 col1, col2 = st.columns(2)
 with col1:
     goal_dist = st.selectbox("Goal Distance", ["5K","10K","Half","Marathon"])
