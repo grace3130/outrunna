@@ -14,12 +14,12 @@ def rpe_to_pace_map(base_pace):
         9: f"{round(base_pace - 0.3, 2)}–{round(base_pace - 0.15, 2)} min/mile (5K)",
     }
 
-# ---------- Workout Library (with updated RPEs) ----------
+# ---------- Workout Library ----------
 workout_library = [
-    {"name": "Easy Run",      "duration": 45, "rpe": 3},  # Easy at RPE 3
-    {"name": "Tempo Run",     "duration": 40, "rpe": 7},  # Tempo at RPE 7
-    {"name": "Long Run",      "duration": 75, "rpe": 4},  # Long at RPE 4
-    {"name": "Norwegian 4x4", "structure": "4x4 min intervals @ RPE 9 with 3 min rest", "duration": 40, "rpe": 9}  # Intervals at RPE 9
+    {"name": "Easy Run",      "duration": 45, "rpe": 3},
+    {"name": "Tempo Run",     "duration": 40, "rpe": 7},
+    {"name": "Long Run",      "duration": 75, "rpe": 4},
+    {"name": "Norwegian 4x4", "structure": "4x4 min intervals @ RPE 9 with 3 min rest", "duration": 40, "rpe": 9}
 ]
 
 # ---------- Generate One Week of Workouts ----------
@@ -39,14 +39,20 @@ def generate_rpe_week(user_profile, workout_library, week_num=1):
         "interval": next(w for w in workout_library if w["name"] == "Norwegian 4x4")
     }
 
-    # Structure for 4-6 days (no 3-day plans)
-    structure = ["long", "easy", "interval", "tempo"] + ["easy"] * (days - 4)
+    # Structure based on days/week
+    if days == 3:
+        # Alternate Day 1 between tempo and intervals
+        first = "tempo" if week_num % 2 == 1 else "interval"
+        structure = [first, "easy", "long"]
+    else:
+        # 4–6 days: long, easy, intervals, tempo, then extra easy
+        structure = ["long", "easy", "interval", "tempo"] + ["easy"] * (days - 4)
 
     week_plan = []
     hard_counts = {"tempo": 0, "interval": 0}
 
     for i, key in enumerate(structure):
-        # Prevent duplicates of hard sessions
+        # Prevent duplicate hard sessions
         if key in hard_counts:
             if hard_counts[key] >= 1:
                 key = "easy"
@@ -146,7 +152,7 @@ with col1:
     goal_dist = st.selectbox("Goal Distance", ["5K","10K","Half","Marathon"])
     pr = st.text_input("5K PR (MM:SS)","25:00")
 with col2:
-    days = st.slider("Days/Week",4,6,4)
+    days = st.slider("Days/Week",3,6,4)
     rd = st.date_input("Race Date",datetime.today()+timedelta(weeks=8))
 
 if st.button("Generate Plan"):
