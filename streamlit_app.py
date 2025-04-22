@@ -14,38 +14,49 @@ def rpe_to_pace_map(base_pace):
         9: f"{round(base_pace - 0.3, 2)}–{round(base_pace - 0.15, 2)} min/mile (5K)",
     }
 
+# ---------- Workout Library (with updated RPEs) ----------
 workout_library = [
-    {"name": "Easy Run", "duration": 45, "rpe": 4},
-    {"name": "Tempo Run", "duration": 40, "rpe": 7},
-    {"name": "Long Run", "duration": 75, "rpe": 6},
-    {"name": "Norwegian 4x4", "structure": "4x4 min intervals @ RPE 8 with 3 min rest", "duration": 40, "rpe": 8}
+    {"name": "Easy Run",      "duration": 45, "rpe": 3},  # Easy at RPE 3
+    {"name": "Tempo Run",     "duration": 40, "rpe": 7},  # Tempo at RPE 7
+    {"name": "Long Run",      "duration": 75, "rpe": 4},  # Long at RPE 4
+    {"name": "Norwegian 4x4", "structure": "4x4 min intervals @ RPE 9 with 3 min rest", "duration": 40, "rpe": 9}  # Intervals at RPE 9
 ]
 
-def generate_rpe_week(user_profile, workout_library):
-    total_minutes = user_profile["weekly_duration_minutes"]
+# ---------- Generate One Week of Workouts ----------
+def generate_rpe_week(user_profile, workout_library, week_num=1):
     days = user_profile["days_per_week"]
+    total_minutes = user_profile["weekly_duration_minutes"]
     minutes_per_day = total_minutes // days
 
     base_5k_pace = user_profile["base_5k_pace"]
     pace_zones = rpe_to_pace_map(base_5k_pace)
 
-    selected_workouts = []
-    used_names = set()
+    # Map types to workout templates
+    workout_types = {
+        "easy": next(w for w in workout_library if w["name"] == "Easy Run"),
+        "tempo": next(w for w in workout_library if w["name"] == "Tempo Run"),
+        "long": next(w for w in workout_library if w["name"] == "Long Run"),
+        "interval": next(w for w in workout_library if w["name"] == "Norwegian 4x4")
+    }
 
-    for _ in range(days):
-        valid = [w for w in workout_library if w["name"] not in used_names]
-        if not valid:
-            valid = workout_library
-        workout = min(valid, key=lambda w: abs(w["duration"] - minutes_per_day))
-        used_names.add(workout["name"])
-        selected_workouts.append(workout)
+    # Structure for 4-6 days (no 3-day plans)
+    structure = ["long", "easy", "interval", "tempo"] + ["easy"] * (days - 4)
 
     week_plan = []
-    for i, w in enumerate(selected_workouts, 1):
+    hard_counts = {"tempo": 0, "interval": 0}
+
+    for i, key in enumerate(structure):
+        # Prevent duplicates of hard sessions
+        if key in hard_counts:
+            if hard_counts[key] >= 1:
+                key = "easy"
+            else:
+                hard_counts[key] += 1
+        w = workout_types[key].copy()
         pace_info = pace_zones.get(w["rpe"], "N/A")
         detail = w.get("structure", f"{w['duration']} min @ RPE {w['rpe']}")
         week_plan.append({
-            "day": f"Day {i}",
+            "day": f"Day {i+1}",
             "workout": w["name"],
             "duration": w["duration"],
             "rpe": w["rpe"],
@@ -55,165 +66,106 @@ def generate_rpe_week(user_profile, workout_library):
 
     return week_plan
 
-def generate_wave(user_profile, start_week_num, base_minutes, progression_rate=0.08, deload_factor=0.7):
+# ---------- Generate 4-Week Wave ----------
+def generate_wave(user_profile, start_week, base_minutes, progression=0.08, deload=0.7):
     wave = []
     goal = user_profile["goal_distance"].lower()
-    time_trial_dist = "2 miles" if goal == "5k" else "5K"
+    tt_dist = 2 if goal == "5k" else 3.1
 
-    for week_offset in range(4):
-        week_num = start_week_num + week_offset
-        is_deload = (week_offset == 3)
+    for offset in range(4):
+        week_num = start_week + offset
+        is_deload = (offset == 3)
+        minutes = round(base_minutes * (deload if is_deload else (1 + progression * offset)), 1)
+
+        week = generate_rpe_week(
+            {**user_profile, "weekly_duration_minutes": minutes},
+            workout_library,
+            week_num
+        )
 
         if is_deload:
-            week_minutes = round(base_minutes * deload_factor, 1)
-        else:
-            week_minutes = round(base_minutes * (1 + progression_rate * week_offset), 1)
-
-        week_workouts = generate_rpe_week({**user_profile, "weekly_duration_minutes": week_minutes}, workout_library)
-
-        if is_deload:
-            time_trial_workout = {
+            tt = {
                 "day": "Day 1",
-                "workout": f"{time_trial_dist} Time Trial",
-                "duration": 20 if goal == "5k" else 25,
-                "rpe": 8,
-                "context_pace": "All-out but steady (goal pace)",
-                "description": "Time trial effort – log your result for pace updates."
+                "workout": f"{tt_dist if tt_dist==2 else '5K'} Time Trial",
+                "duration": 20 if tt_dist == 2 else 25,
+                "rpe": 9,
+                "context_pace": "All-out (goal pace)",
+                "description": "Time trial—log result to update paces"
             }
-            replaced = False
-            for i, w in enumerate(week_workouts):
-                if w["rpe"] in [7, 8]:
-                    week_workouts[i] = time_trial_workout
-                    replaced = True
+            for j, sess in enumerate(week):
+                if sess["rpe"] in [7, 9]:
+                    week[j] = tt
                     break
-            if not replaced:
-                week_workouts[0] = time_trial_workout
-
-        wave.append({
-            "week_num": week_num,
-            "total_minutes": week_minutes,
-            "workouts": week_workouts
-        })
-
+        wave.append({"week": week_num, "minutes": minutes, "sessions": week})
     return wave
 
-def generate_plan_until_race(user_profile, start_date, race_date, base_minutes):
+# ---------- Full Plan Until Race ----------
+def generate_plan(user_profile, start_date, race_date, base_minutes):
     start = datetime.strptime(start_date, "%Y-%m-%d")
     race = datetime.strptime(race_date, "%Y-%m-%d")
-    total_weeks = (race - start).days // 7
+    weeks = (race - start).days // 7
 
     plan = []
-    current_week = 1
-    peak_minutes = base_minutes
+    week_cursor = 1
+    peak = base_minutes
 
-    while total_weeks - current_week >= 2:
-        wave = generate_wave(user_profile, current_week, base_minutes)
-        plan.extend(wave)
-        base_minutes = wave[-2]["total_minutes"]
-        peak_minutes = max(peak_minutes, base_minutes)
-        current_week += 4
+    while weeks - week_cursor >= 2:
+        wv = generate_wave(user_profile, week_cursor, base_minutes)
+        plan.extend(wv)
+        base_minutes = wv[-2]["minutes"]
+        peak = max(peak, base_minutes)
+        week_cursor += 4
 
-    taper_minutes = round(peak_minutes * 0.7, 1)
-    taper_week = generate_rpe_week({**user_profile, "weekly_duration_minutes": taper_minutes}, workout_library)
+    # Taper
+    taper_min = round(peak * 0.7, 1)
+    tw = generate_rpe_week({**user_profile, "weekly_duration_minutes": taper_min}, workout_library)
+    plan.append({"week": week_cursor, "minutes": taper_min, "label": "Taper Week", "sessions": tw})
+    week_cursor += 1
 
-    plan.append({
-        "week_num": current_week,
-        "total_minutes": taper_minutes,
-        "label": "Taper Week",
-        "workouts": taper_week
-    })
-    current_week += 1
-
-    race_workout = {
-        "day": "Day 3",
-        "workout": f"{user_profile['goal_distance'].upper()} Race",
-        "duration": 25 if user_profile["goal_distance"].lower() == "5k" else 60,
-        "rpe": 9,
-        "context_pace": "All-out (race effort)",
-        "description": "Race day – give it your best and log your result!"
-    }
-
-    strides = {
-        "day": "Day 1",
-        "workout": "Taper Strides – 6x400m",
-        "duration": 20,
-        "rpe": 7,
-        "context_pace": "10K pace",
-        "description": "6x400m at 10K pace with full recovery. Sharpen up."
-    }
-
-    plan.append({
-        "week_num": current_week,
-        "total_minutes": round(peak_minutes * 0.5, 1),
-        "label": "Race Week",
-        "workouts": [strides, race_workout]
-    })
-
+    # Race Week
+    race_wk = [
+        {"day": "Day 1", "workout": "6x400m Strides", "duration": 20, "rpe": 9, "context_pace": "10K pace", "description": "Sharpen up"},
+        {"day": "Day 3", "workout": f"{user_profile['goal_distance']} Race", "duration": 25 if user_profile['goal_distance']=="5K" else 60, "rpe": 9, "context_pace": "All-out", "description": "Race day!"}
+    ]
+    plan.append({"week": week_cursor, "minutes": round(peak*0.5,1), "label": "Race Week", "sessions": race_wk})
     return plan
 
-def update_prediction(trial_time_str, trial_distance_mi, goal_distance_mi):
-    # Convert MM:SS to total minutes
-    minutes, seconds = map(int, trial_time_str.split(":"))
-    trial_time_min = minutes + seconds / 60
-
-    # Riegel formula
-    predicted_time = trial_time_min * (goal_distance_mi / trial_distance_mi) ** 1.06
-
-    # Convert to MM:SS format
-    predicted_min = int(predicted_time)
-    predicted_sec = int((predicted_time - predicted_min) * 60)
-    return f"{predicted_min}:{predicted_sec:02d}"
+# ---------- Prediction ----------
+def predict_time(trial_str, trial_dist, goal_dist):
+    m, s = map(int, trial_str.split(':'))
+    t1 = m + s/60
+    t2 = t1 * (goal_dist / trial_dist) ** 1.06
+    mm = int(t2)
+    ss = int((t2 - mm)*60)
+    return f"{mm}:{ss:02d}"
 
 # ---------- Streamlit UI ----------
-st.title("OutRunna. It's free.")
-
+st.title("OutRunna MVP")
 col1, col2 = st.columns(2)
 with col1:
-    goal_distance = st.selectbox("Goal Distance", ["5K", "10K", "Half", "Marathon"])
-    five_k_pr = st.text_input("Your 5K PR (MM:SS)", "25:00")
+    goal_dist = st.selectbox("Goal Distance", ["5K","10K","Half","Marathon"])
+    pr = st.text_input("5K PR (MM:SS)","25:00")
 with col2:
-    days_per_week = st.slider("Training Days per Week", 3, 6, 4)
-    race_date = st.date_input("Race Date", value=datetime.today() + timedelta(weeks=8))
+    days = st.slider("Days/Week",4,6,4)
+    rd = st.date_input("Race Date",datetime.today()+timedelta(weeks=8))
 
 if st.button("Generate Plan"):
-    minutes = int(five_k_pr.split(":")[0]) * 60 + int(five_k_pr.split(":")[1])
-    pace = minutes / 3.1  # in seconds per mile
-    base_5k_pace = pace / 60  # convert to min/mile
+    mins, secs = map(int, pr.split(':'))
+    base_pace = (mins*60+secs)/3.1/60
+    user = {"goal_distance":goal_dist,"days_per_week":days,"weekly_duration_minutes":240,"base_5k_pace":base_pace}
+    plan = generate_plan(user,str(datetime.today().date()),str(rd),240)
 
-    user_profile = {
-        "goal_distance": goal_distance,
-        "days_per_week": days_per_week,
-        "weekly_duration_minutes": 240,
-        "base_5k_pace": base_5k_pace
-    }
+    st.subheader("Race Prediction")
+    tt = st.text_input("Time Trial (MM:SS)","")
+    tdist = 2 if goal_dist=="5K" else 3.1
+    gdist = {"5K":3.1,"10K":6.2,"Half":13.1,"Marathon":26.2}[goal_dist]
+    if tt and ':' in tt:
+        st.success(f"Predicted {goal_dist} Time: {predict_time(tt,tdist,gdist)}")
 
-    plan = generate_plan_until_race(user_profile, str(datetime.today().date()), str(race_date), 240)
-    # ---------- Time Trial Prediction Display ----------
-st.subheader("📊 Race Time Prediction (Based on Time Trial)")
-
-# Input for latest time trial result
-trial_time = st.text_input("Enter your most recent time trial result (MM:SS)", "16:30")
-
-# Time trial and goal distances in miles
-trial_dist = 2 if goal_distance.lower() == "5k" else 3.1
-goal_dist = {
-    "5k": 3.1,
-    "10k": 6.2,
-    "half": 13.1,
-    "marathon": 26.2
-}[goal_distance.lower()]
-
-# Calculate and show predicted race time
-if trial_time:
-    prediction = update_prediction(trial_time, trial_dist, goal_dist)
-    st.success(f"Predicted {goal_distance.upper()} Time: **{prediction}**")
-
-    st.subheader("Your Training Plan")
-    for week in plan:
-        label = week.get("label", f"Week {week['week_num']}")
-        st.markdown(f"### {label} – {week['total_minutes']} min")
-        for w in week["workouts"]:
-            st.markdown(f"- **{w['day']}**: {w['workout']} – {w['duration']} min @ RPE {w['rpe']}  ")
-            st.caption(f"Pace: {w['context_pace']} | {w['description']}")
-
-
+    st.subheader("Training Plan")
+    for wk in plan:
+        label = wk.get('label',f"Week {wk['week']}")
+        st.markdown(f"### {label} – {wk['minutes']} min")
+        for s in wk['sessions']:
+            st.markdown(f"- **{s['day']}**: {s['workout']} – {s['duration']} min @ RPE {s['rpe']}")
+            st.caption(f"Pace: {s.get('context_pace','N/A')} | {s.get('description','')}")
