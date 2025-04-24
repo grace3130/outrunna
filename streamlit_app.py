@@ -9,6 +9,7 @@ st.set_page_config(page_title="OutRunna", page_icon="🏃")
 st.title("OutRunna. It's free.")
 st.markdown("""
 **Two hard workouts per week (Intervals & Tempo) + one Long Run**
+            
 From Coach Chris Bennett: 2 hard sessions a week, then run as many easy miles as your legs can handle.
 """)
 
